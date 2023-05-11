@@ -1,14 +1,12 @@
 # ExplorationMeasures
-This is the repository for "Towards a characterization of human spatial exploration behavior"
-
+This is the repository for Baumann et al.: "Towards a characterization of human spatial exploration behavior" (unpublished). For background information on the dataset, please see [Schomaker et al., (2022). *Effects of exploring a novel environment on memory across the lifespan*](https://www.nature.com/articles/s41598-022-20562-4).
 
 ## Repository structure
-- *position_data* contains the raw trajectories (as .csv files) for each subject, indexed by subjuect identifier and exposition (i.e., *500_1.csv* represents the first exploration round for subject 500). Note that we here only use data from the first exploration round. All trajectories were recorded in three dimensions (x,y,z).Note that trajectories do not contain timestamps (see publication for more details and how trajectories were resampled to a common sampling rate).
+- *position_data* contains the raw trajectories (as .csv files) for each subject, indexed by subject identifier and exposition (i.e., *500_1.csv* represents the trajectory for subject 500). Note that while the original dataset contained two rounds of exploration, we here only use data from the first exploration round. All trajectories were recorded in three dimensions (order of columns: x,y,z) Note that trajectories do not contain timestamps (see publication for more details and how trajectories were resampled to a common sampling rate).
 - *person_data* contains a SPSS dataset (*person_data.sav*) with the corresponding subject information (age, sex, envrionment type, novelty seeking score)
 - *object_data* contains two .csv files with object coordinates for each of the two virtual environments ("green" or "pink") 
 - *feature_extraction* contains the Python code used for the extraction of exploration measures as well as for all plots showing raw trajectories
-- *position_data_rediscretized* contains numpy files with all traqjctories rediscretized to a regular step length
-- *position_data_flightScaled* contains numpy files with all trajectories resampled to the flight scale
+- *pflight_data* contains numpy files with all trajectories resampled to the flight scale following the same indexing order as detailed above(i.e., *500_1_flight.csv* represents the flight scaled trajectory for subject 500)
 - *analysis* contains the R code used for hierarchical clustering and statistical models and all plots related to the analysis
 - *output_data* contains output data from feature extraction and plotting
 
@@ -27,7 +25,7 @@ All Exploration measures can be applied either to a single trajectory (indicated
 Functions are available for the following measures:
 - PathLength
 - Pausing
-- AreaCovered
+- Area Covered
 - Roaming Entropy
 - Sinuosity
 - Fractal Dimension
@@ -48,3 +46,6 @@ Functions are available for the following measures:
 ## Contact
 For further information please contact M.Sc.Psych. Valentin Baumann
 valentin(dot)baumann(at)med(dot)ovgu(dot)de or valentin(dot)adrian(dot)baumann(at)gmail(dot)com
+
+## A note on other movement analysis packages 
+Note that for some measures we adapted code from two already published software packages, *[trajr]*(https://onlinelibrary.wiley.com/doi/10.1111/eth.12739) and *[traja]*(https://joss.theoj.org/papers/10.21105/joss.03202). If possible, we crossvalidated results between packages to ensure correct computation of features. 
