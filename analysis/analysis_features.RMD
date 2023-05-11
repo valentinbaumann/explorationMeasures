@@ -1,0 +1,420 @@
+
+---
+title: "NEMO data - feature clustering"
+author: "Valentin"
+date: "`r Sys.Date()`"
+output: html_document
+encoding: UTF-8
+---
+
+
+
+```{r, SETTINGS-knitr, include=FALSE}
+#### set knitr options
+
+stopifnot(require(knitr))
+options(width = 90)
+opts_chunk$set(
+  cache = FALSE,
+  comment = NA,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+
+# import libraries
+```{r, echo=FALSE, include=FALSE}
+
+source("NEMO_libraries.R")
+
+```
+
+
+
+# create the dataset
+
+```{r}
+
+source("NEMO_ReadData.R") # this also imports all custom functions from "NEMO_funsctions.R"
+
+
+```
+
+
+
+# remove subjects who fell of the map
+
+```{r}
+
+main_data = subset(main_data, DistanceTravelledY <= 1000)
+
+main_data = droplevels.data.frame(main_data)
+```
+
+
+
+
+# remove subjects with low movement
+```{r}
+
+
+#################
+# remove subjects with low movement
+lowMovCutoff = 4/5 * 1500 # at least 4/5 of all steps (1500 total) should be non-idle steps (this is equal to a minimum of 30s spent moving)
+
+# exclude low movement subjects
+main_data = subset(main_data, IdleSteps2d <= lowMovCutoff)
+
+
+```
+
+
+
+# remove subjects with high step length variance
+```{r}
+
+#######################
+ # remove subjects with extremly high step length variance
+  
+IQR = quantile(main_data$StepLengthCoeffVar)[4] - quantile(main_data$StepLengthCoeffVar)[2]
+extremeValuesUpperBoundary = quantile(main_data$StepLengthCoeffVar)[4] + 3 * IQR
+main_data = subset(main_data, StepLengthCoeffVar <= extremeValuesUpperBoundary)
+
+
+```
+
+
+ # remove subjects with high porportion of lag steps
+```{r}
+
+
+#######################
+ # remove subjects with high porportion of lag steps
+
+main_data = subset(main_data, LagStepsPercent3xMedian <= 0.1)
+
+main_data = droplevels.data.frame(main_data)
+
+```
+
+
+# check how many data points were lost by trimming trajectories
+```{r}
+
+# trim loss in seconds 
+median(main_data$trimLoss) # in datapoints
+median(main_data$trimLoss) / 10 # in seconds
+sd(main_data$trimLoss) / 10
+
+```
+
+
+
+
+# demographics of final sample
+```{r, fig.width=10, fig.height=5}
+
+createHist(main_data[main_data$Sex != "",], "Age", groupVar = "Sex", binwidth = 1) + theme_bw() + scale_x_continuous(breaks = seq(10, 80, by = 10))
+
+mean(main_data$Age, na.rm = TRUE)
+median(main_data$Age, na.rm = TRUE)
+sd(main_data$Age, na.rm = TRUE)
+
+# get numbers of males/females/none
+nrow(main_data[main_data$Sex=="male",])
+nrow(main_data[main_data$Sex=="female",])
+nrow(main_data[main_data$Sex=="",])
+
+
+
+```
+
+
+
+# rename and invert some variables (inversion necessary for corrPlot)
+
+```{r}
+
+main_data$PathLength = main_data$DistanceTravelled2d_100ms
+main_data$PausingInv = invert(main_data$IdleSteps2d)
+main_data$AreaEfficiency = main_data$AreaCoveredRaw_14 / main_data$DistanceTravelled2d_100ms
+main_data$ObjectEfficiency = main_data$ObjectsVisited10 / main_data$DistanceTravelled2d_100ms
+main_data$ObjectRevisitsInv = invert(main_data$ObjectRevisits)
+main_data$ObjectEfficiency2 = main_data$ObjectsVisited10 / (main_data$ObjectRevisits + 1)
+
+main_data$numTurningPointsFlight160Inv = invert(main_data$numTurningPointsFlight160)
+main_data$numTurningPointsRaw160Inv = invert(main_data$numTurningPointsRaw160)
+
+main_data$numTurningPointsFlight180Inv = invert(main_data$numTurningPointsFlight180)
+main_data$numTurningPointsRaw180Inv = invert(main_data$numTurningPointsRaw180)
+
+main_data$RevisitingGagnonInv = invert(main_data$RevisitingGagnon14)
+
+
+```
+
+
+
+
+
+
+# variable clustering using the ClustOfVar library
+
+
+### standardize data
+```{r, echo=FALSE}
+
+
+# exclude any cases with NAs for any of the correlated params (important for simplified angles)
+main_data_standardized <- as.data.frame(scale(select(main_data,
+                                                         PathLength,
+                                                         PausingInv,
+                                                         AreaCoveredRaw_14, 
+                                                         RoamingEntropy_14, 
+                                                         ObjectsVisited10, 
+                                                         SinuosityRediscretized,
+                                                         FractalDimension,
+                                                         ObjectRevisitsInv,
+                                                         RevisitingGagnonInv,
+                                                         AreaEfficiency,
+                                                         ObjectEfficiency,
+                                                         numTurningPointsRaw180Inv,
+                                                         numTurningPointsFlight160Inv,
+                                                         )))
+
+main_data_standardized = main_data_standardized[complete.cases(main_data_standardized), ]
+
+
+library(data.table)
+
+setnames(main_data_standardized, old = colnames(main_data_standardized), new = c('PathLength','Pausing','AreaCovered','RoamingEntropy','LandmarksVisited','Sinuosity','FractalDimension','LandmarkRevisits','Revisiting','AreaEfficiency','LandmarkEfficiency',"Turnarounds", 'FlightTurnarounds'))
+
+
+movParams = main_data_standardized
+
+```
+
+
+
+### check linearity of relationships by plotting all scatterplots (CAVE: takes a very long time)
+
+```{r, echo=FALSE, fig.width=15, fig.height=15}
+
+#library(GGally)
+
+#ggpairs(main_data_standardized)
+
+```
+
+
+### create correlation plot using the corrPlot package
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+corrMatrix = cor(movParams)
+
+# note that cluster boxes are determined by hclust algorithm (same result as ClustofVar)
+corrplot(corrMatrix, method = "color", order = "hclust", addrect = 4, tl.col = 'black', tl.cex = 1.3, cl.cex = 1.3)
+
+
+```
+
+
+
+# run hierarchical clustering (using ClustOfVar)
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+library(ClustOfVar)
+
+# run clustering and plot tree
+myTree <- hclustvar(movParams)
+plot(myTree, type = "tree") # plot dendrogram
+plot(myTree, type = "index") # plot elbow graph
+
+# run additional diagnostics
+stab = stability(myTree, B = 40) 
+boxplot(stab$matCR, main = "Dispersion of the adjusted Rand index")
+
+
+
+```
+
+
+
+# make a nicer dendrogram
+
+```{r, fig.width=8, fig.height=6}
+
+
+library(ggdendro)
+
+# change object class for integration with ggdendro
+myTreeHclust = myTree
+class(myTreeHclust) = "hclust"
+
+
+ggdendrogram(myTreeHclust, rotate = FALSE, size = 2, theme_dendro = FALSE) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=15), axis.text.y = element_text(size=15), axis.title.x=element_blank(), axis.title.y=element_text(size = 15, face = "plain")) +
+  ylab("height")
+
+
+
+```
+
+
+# make a nicer aggregation levels plot
+
+```{r, fig.width=8, fig.height=5}
+
+heights = myTree$height
+nums = seq(12,1)
+aggregationLevels = data.frame(heights, nums)
+aggregationLevels$nums = as.factor(aggregationLevels$nums)
+
+ggplot(data = aggregationLevels, aes(x = nums, y = heights)) +
+  geom_point() +
+  theme_bw() +
+  xlab("number of clusters") +
+  ylab("aggregation level") +
+  theme(axis.text.x = element_text(size=15), axis.text.y = element_text(size=15), axis.title.x=element_text(size = 15, face = "plain"), axis.title.y=element_text(size = 15, face = "plain")) +
+  geom_vline(xintercept = 4, size = 2, alpha = 0.5, colour = "darkblue") +
+  geom_line(group = 1, linetype = "dotted")
+
+
+
+
+```
+
+
+# show that results are similar using another clustering algorithm (hclust)
+
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+# # https://github.com/taiyun/corrplot/blob/master/R/corrRect.hclust.R
+# # replicate the clustering underlying corrplot()
+# distMatrixCorr = as.dist(1 - corrMatrix)
+# # # run hierarchical clustering
+# hcCorr <- hclust(distMatrixCorr, method = "complete")
+# # # plot results as Dendrogram
+# plot(hcCorr)
+
+
+
+```
+
+
+
+
+# rerun clustering without turnarounds (using ClustOfVar) and get cluster loadings
+
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+movParams = select(main_data_standardized, !Turnarounds) # exclude turnarounds
+
+
+# run clustering and plot tree
+myTree <- hclustvar(movParams)
+plot(myTree, type = "tree")
+
+
+
+```
+
+
+### get all loadings 
+
+```{r}
+
+# extract clusters and show variable loading on cluster
+myClusters = cutreevar(myTree, k = 3)
+#plot(myClusters)
+
+
+# now, get synthetic variable values for each cluster and add them to the main dataframe
+# invert synthetic variable score for cluster 1 so the correlation of features and synthetic variable is positive
+main_data$ExploratoryActivity = myClusters$scores[,1] * -1 
+main_data$SpatialShape = myClusters$scores[,2]
+main_data$ExplorationEfficiency = myClusters$scores[,3]
+
+                                                      
+ExploratoryActivity = myClusters$scores[,1] * -1
+SpatialShape = myClusters$scores[,2]
+ExplorationEfficiency = myClusters$scores[,3]
+
+cor(movParams, ExploratoryActivity) 
+cor(movParams, SpatialShape)
+cor(movParams, ExplorationEfficiency)
+
+
+```
+
+
+
+
+
+
+# check relationship novelty seeking - cluster variables (adults)
+
+```{r, fig.width=10, fig.height=4}
+
+main_data_adults = main_data[main_data$Age >= 18 & !is.na(main_data$Age),]
+
+
+# convert to long format so we can compare cluster types
+main_data_adults_long = select(main_data_adults, Subject, Age, Sex, NoveltySeeking, ExploratoryExcitability, Impulsiveness, Extravagance, Disorderliness, ExploratoryActivity, ExplorationEfficiency, SpatialShape)
+main_data_adults_long = pivot_longer(main_data_adults_long, ExploratoryActivity:SpatialShape, names_to = "ClusterType", values_to = "SyntheticVarScore")
+
+# reorder levels
+main_data_adults_long$ClusterType =factor(main_data_adults_long$ClusterType, levels = c("ExploratoryActivity","SpatialShape","ExplorationEfficiency"))
+
+# center Novelty Seeking variable and z standardize synthetic variable score for better model interpretability
+main_data_adults_long$NoveltySeekingCentered =  scale(main_data_adults_long$NoveltySeeking, scale = FALSE) # center on mean
+main_data_adults_long$SyntheticVarScore =  scale(main_data_adults_long$SyntheticVarScore , scale = TRUE) # z standardize
+
+# we will use a mixed effects model to account for the within-subject effect of cluster type
+library(lme4)
+mymodel = lmer(SyntheticVarScore ~ NoveltySeekingCentered * ClusterType + (1|Subject), data = main_data_adults_long)
+summary(mymodel)
+
+
+# get all slopes and differences between slopes
+library(emmeans)
+# slopes only
+myEMT = emtrends(mymodel, "ClusterType", var="NoveltySeekingCentered")
+summary(myEMT, infer = TRUE)
+
+# slope comparisons
+myEMT = emtrends(mymodel, pairwise ~ ClusterType, var="NoveltySeekingCentered")
+summary(myEMT, infer = TRUE)
+
+
+
+
+```
+
+
+
+
+# create novelty seeking scatter plot
+```{r, fig.width=10, fig.height=4}
+
+
+createScatter(main_data_adults_long, "NoveltySeeking", "SyntheticVarScore", smoothMethod = "lm", facetVar = "ClusterType", facetCols = 3) + 
+  #coord_cartesian(ylim = c(-5,5)) + 
+  theme_bw() +
+  ylab("Synthetic Cluster Variable") +
+  scale_x_continuous(name="Novelty Seeking") +
+  theme(axis.text.x = element_text(size=15), axis.text.y = element_text(size=15), axis.title.x=element_text(size = 15, face = "plain"), axis.title.y=element_text(size = 15, face = "plain"), strip.text.x = element_text(size = 15))
+
+
+
+```
+
+
+
+
+
+
