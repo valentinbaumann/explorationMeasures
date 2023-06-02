@@ -34,8 +34,25 @@ os.chdir(pathToSourceFiles)
 import readData as readData # import data from .mat files
 import statisticalMeasure as stm # computation of features
 import visual as vis # plotting # visualization fucntions (heatmaps etc.)
-        
+
+
+
+
+
+
+
+
+
 os.chdir(home)
+
+
+
+
+
+
+
+
+
 
 
 
@@ -125,6 +142,9 @@ print("create filters")
 
 f_green = np.asarray(df_persons.index[df_persons['World'] == 'Green'])
 f_pink = np.asarray(df_persons.index[df_persons['World'] == 'Pink'])
+
+
+
 
 
 

@@ -18,12 +18,18 @@ from scipy import stats
 #%%
 # functions on step length
 
-def computeLength(paths, dimension):
+def computePathLength(path, dimension = "2d"):
     """Returns the total length of the path."""
-    res = []
-    for p in paths:
-        res.append(np.sum(computeStepLength(p, dimension)))
-    return np.asarray(res)
+    pathLength = np.sum(computeStepLength(path, dimension))
+    return pathLength
+def getPathLength(paths, dimension = "2d"):
+        """Returns the total length of the path."""
+        res = []
+        for p in paths:
+            res.append(computePathLength(p, dimension))
+        return np.asarray(res)
+
+
 
 def getHistoryStepLength(paths, dimension = "2d", includeZeroSteps = True):
      """Returns the sequence of step lengths for each paths. Set includeZeroSteps to FALSE if only non-zero steps should be included."""
@@ -39,7 +45,7 @@ def getHistoryStepLength(paths, dimension = "2d", includeZeroSteps = True):
 # single path based functions with step wise return:
 # relies on euclidian distance
 def computeStepLength(path, dimension = "2d"):
-    """Returns sequence of step lengths for a single path."""
+    """Returns sequence of step lengths for a single path as a numpy array. """
     if dimension == "2d":
         if np.shape(path)[1] > 2: # consider possible path types (4d, 3d or 2d)
             path2d = path[:,[0,2]]
@@ -75,12 +81,17 @@ def getLagStepPercent(stepHistories, cutoffMultiplier):
 #%%
 # functions on time
 
-def computeTime(paths):
-    """Returns the total length of the path."""
-    res = []
-    for p in paths:
-        res.append(len(p))
-    return np.asarray(res)
+def computeTime(path):
+    """Returns the time spent exploring. Note that "time" is represented as the number of datapoints rather than an actual time unit, so the interpretation relies on the sampling rate. """
+
+    return len(path)
+def getTime(paths):
+        """Returns the time spent exploring for a list of trajectories as a numpy array. Note that "time" is represented as the number of datapoints rather than an actual time unit, so the interpretation relies on the sampling rate."""
+        res = []
+        for p in paths:
+            res.append(computeTime(p))
+        return np.asarray(res)
+
 
 def getIdleTime(paths, mode, dim):
     """Returns the number or the percentage of steps (indicated by mode = "raw" or mode = "percent") without movement. """
