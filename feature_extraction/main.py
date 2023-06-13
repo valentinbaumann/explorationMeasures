@@ -178,8 +178,8 @@ print("distance parameters")
 # relies on stm.computeStepLength()
 # dimension can be "2d" for distances on the x-z plane, "3d" for full three dimensional distances or "y" for distances on y axis (y axis distance is used for subject exclusion later on)
 # dependent on sampling rate (see Ranacher & Tzavella, 2014)
-df_persons.loc[:,'DistanceTravelledY'] = stm.computeLength(path_data_trimmed, "y") # run this on the original data before resampling 
-df_persons.loc[:,'DistanceTravelled2d_100ms'] = stm.computeLength(path_data_resampled, "2d") # here, we take the distance of the resampled paths
+df_persons.loc[:,'DistanceTravelledY'] = stm.getPathLength(path_data_trimmed, "y") # run this on the original data before resampling 
+df_persons.loc[:,'DistanceTravelled2d_100ms'] = stm.getPathLength(path_data_resampled, "2d") # here, we take the distance of the resampled paths
 
 
 
