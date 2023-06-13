@@ -1,6 +1,8 @@
 # ExplorationMeasures
 This is the repository for Baumann et al.: "Towards a characterization of human spatial exploration behavior" (unpublished). For background information on the dataset, please see [Schomaker et al., (2022). *Effects of exploring a novel environment on memory across the lifespan*](https://www.nature.com/articles/s41598-022-20562-4).
 
+![visualization of trajctories](./pictures/img_trajectories.png "visualization of trajectories")
+
 ## Repository structure
 - *position_data* contains the raw trajectories (as .csv files) for each subject, indexed by subject identifier and exposition (i.e., *500_1.csv* represents the trajectory for subject 500). Note that while the original dataset contained two rounds of exploration, we here only use data from the first exploration round. All trajectories were recorded in three dimensions (order of columns: x,y,z) Note that trajectories do not contain timestamps (see publication for more details and how trajectories were resampled to a common sampling rate).
 - *person_data* contains a SPSS dataset (*person_data.sav*) with the corresponding subject information (age, sex, envrionment type, novelty seeking score)
