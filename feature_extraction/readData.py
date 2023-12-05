@@ -36,9 +36,16 @@ def trimPathSet(paths, dimension = "3d"):
     return res
 
 
-def loadPersonData(pathToMainTable):
+# for SPSS file
+# def loadPersonData(pathToMainTable):
+#     """Loads the dataset with all the information associated with the idnividual trajectories. Requires an .sav (SPSS) file as input."""    
+#     df_persons = pd.read_spss(os.path.join(pathToMainTable, 'person_data.sav'))
+#     return df_persons
+
+
+def loadPersonData(pathToMainTable, filename):
     """Loads the dataset with all the information associated with the idnividual trajectories. Requires an .sav (SPSS) file as input."""    
-    df_persons = pd.read_spss(os.path.join(pathToMainTable, 'person_data.sav'))
+    df_persons = pd.read_csv(os.path.join(pathToMainTable, filename))
     return df_persons
 
 
@@ -61,4 +68,14 @@ def loadLogsFromCSV(path):
     return res
 
 
+
+
+def dropColumn(paths, columns):
+    """ 'columns' defines the columns to delete (specify as list)"""    
+
+    res = []
+    for p in paths:
+        reduced_p = np.delete(p, columns, axis = 1)
+        res.append(reduced_p)
+    return res
     
