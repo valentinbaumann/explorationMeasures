@@ -19,7 +19,7 @@ pio.renderers.default = 'browser' # plotly output will show in browser
 ##############
 # define paths for input paths
 
-home = os.getcwd()
+home = 'C:/Users/Valentin/Desktop/KKJP/explorationMeasures'
 
 pathToSourceFiles = os.path.join(home, "feature_extraction")
 pathToLogs = os.path.join(home, 'position_data')  
@@ -36,21 +36,7 @@ import statisticalMeasure as stm # computation of features
 import visual as vis # plotting # visualization fucntions (heatmaps etc.)
 
 
-
-
-
-
-
-
-
 os.chdir(home)
-
-
-
-
-
-
-
 
 
 
@@ -64,7 +50,7 @@ print("load data")
     
 ###############
 # get person data
-df_persons = readData.loadPersonData(pathToPersonData)  # TODO: fix person data import
+df_persons = readData.loadPersonData(pathToPersonData, "person_data_NEMO.csv")  # TODO: fix person data import
 
 ###############
 # load object data
@@ -82,7 +68,7 @@ path_data_trimmed = readData.trimPathSet(path_data_raw) # trim path
 
 # add timestamps
 path_data_raw_2d = stm.convert3dTo2d(path_data_raw) # extract x and z 
-path_data_raw_2d_timestamps = stm.add_timestamps(path_data_raw_2d, 150000, "array") # recreate timestamps # TODO: fix timestamp procedure
+path_data_raw_2d_timestamps = stm.add_timestamps(path_data_raw_2d, 150000, "array") # recreate timestamps 
 
 # resample trajectories to 100 ms time intervals (10 Hz sampling rate)
 path_data_raw_resampled = stm.resamplePaths(path_data_raw_2d_timestamps, 100) # resample to a common sampling interval
