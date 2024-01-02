@@ -46,7 +46,7 @@ os.chdir(home)
 ### read data
 print("load data")
 
-# CAVE: df_persons and path_data MUST be of same length and indexing, as the all trajectories are only indexed by their position within the respective list
+# CAVE: df_persons and path_data MUST be of same length and indexing, as the trajectories are only indexed by their position within the respective list
     
 ###############
 # get person data
@@ -166,8 +166,6 @@ print("distance parameters")
 # dependent on sampling rate (see Ranacher & Tzavella, 2014)
 df_persons.loc[:,'DistanceTravelledY'] = stm.getPathLength(path_data_trimmed, "y") # run this on the original data before resampling 
 df_persons.loc[:,'DistanceTravelled2d_100ms'] = stm.getPathLength(path_data_resampled, "2d") # here, we take the distance of the resampled paths
-
-
 
 
 #%%
