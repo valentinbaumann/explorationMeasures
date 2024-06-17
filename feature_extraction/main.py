@@ -104,7 +104,7 @@ else: # comptue from scratch
     path_data_simple_6 = stm.getSimplePaths(stm.convert3dTo2d(path_data_resampled), epsilon=6) # run simplification on 2d paths, since otherwise some steps appear to have values of 0 in 2d space
 
     # # save to csv    
-    # df_persons['Subject'] = df_persons['Subject'].astype(int).astype(str) # convert to in and then str to remove decimals
+    # df_persons['Subject'] = df_persons['Subject'].astype(int).astype(str) # convert to int and then str to remove decimals
     # numSubjects = len(df_persons)
 
     # for i in range(numSubjects):
