@@ -1,5 +1,5 @@
 
-##### all functions related to loading the raw data
+#### all functions related to loading the raw data
 
 ### import libraries and set paths
 
@@ -35,12 +35,17 @@ def trimPathSet(paths, dimension = "3d"):
             res.append(trimmed_path)
     return res
 
-
-# for SPSS file
-# def loadPersonData(pathToMainTable):
-#     """Loads the dataset with all the information associated with the idnividual trajectories. Requires an .sav (SPSS) file as input."""    
-#     df_persons = pd.read_spss(os.path.join(pathToMainTable, 'person_data.sav'))
-#     return df_persons
+ 
+def cutPath(path, cutoff):
+    shortPath = path[0:cutoff,:]
+    return shortPath
+    
+def cutPathSet(paths, cutoff):
+    res = []
+    for p in paths:
+        shortPath = cutPath(p, cutoff)
+        res.append(shortPath)
+    return res
 
 
 def loadPersonData(pathToMainTable, filename):
@@ -50,7 +55,8 @@ def loadPersonData(pathToMainTable, filename):
 
 
 
-def loadLogsFromCSV(path): 
+
+def loadLogsFromCSV(path, sep, header): 
     
     fileList = os.listdir(path) # get file list
     os.chdir(path)
@@ -59,14 +65,13 @@ def loadLogsFromCSV(path):
     print("reading files from: " + path)
 
     for p in fileList:
-        mytraj_df = pd.read_csv(p, sep=",", header=None)
+        mytraj_df = pd.read_csv(p, sep=sep, header=header)
 
         mytraj = mytraj_df.values
 
         res.append(mytraj)
         print(p)
     return res
-
 
 
 
@@ -78,4 +83,29 @@ def dropColumn(paths, columns):
         reduced_p = np.delete(p, columns, axis = 1)
         res.append(reduced_p)
     return res
+
     
+def addCoordOffset(paths, x_offset, z_offset):
+    ''' requires 3d path'''
+    res = []
+    for p in paths:
+        p[:,0] = p[:,0] + x_offset
+        #p[:,2] = p[:,2] * -1 + z_offset
+        p[:,2] = p[:,2] + z_offset
+        res.append(p)
+    return(res)
+    
+
+def saveFlightLogsToCSV(paths, df_persons, filePath):
+    """add timestamps to all input paths (as a list of arrays), given either sampling intervals or session duration. """    
+    # save to csv    
+    #df_persons['Subject'] = df_persons['Subject'].astype(int).astype(str) # convert to in and then str to remove decimals
+    numSubjects = len(df_persons)
+
+    for i in range(numSubjects):
+        trajectory = paths[i]
+        logName = df_persons["Subject"].values[i]
+        print(logName)
+
+        filePathIndividual = filePath + "\\" + logName + "_flight" + ".csv"
+        pd.DataFrame(trajectory).to_csv(filePathIndividual, header=False, index=False)

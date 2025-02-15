@@ -1,0 +1,666 @@
+
+---
+title: "NEMO & SILCTON data - feature clustering"
+author: "Valentin"
+date: "`r Sys.Date()`"
+output: html_document
+encoding: UTF-8
+---
+
+
+
+```{r, SETTINGS-knitr, include=FALSE}
+#### set knitr options
+
+stopifnot(require(knitr))
+options(width = 90)
+opts_chunk$set(
+  cache = FALSE,
+  comment = NA,
+  message = FALSE,
+  warning = FALSE
+)
+
+ # include fonts 
+windowsFonts()
+```
+
+
+# import libraries
+```{r, echo=FALSE, include=FALSE}
+
+source("NEMO_libraries.R")
+
+```
+
+
+
+# create the dataset
+
+```{r}
+
+source("NEMO_ReadData.R") # this also imports all custom functions from "NEMO_functions.R"
+
+
+```
+
+ 
+ 
+
+# for NEMO data: remove subjects who fell of the map
+
+```{r}
+
+data_NEMO = subset(data_NEMO, PathLength_Y <= 1000)
+
+data_NEMO = droplevels.data.frame(data_NEMO)
+```
+
+
+
+
+# for NEMO data: remove subjects with low movement
+```{r}
+
+
+#################
+# remove subjects with low movement
+lowMovCutoff = 4/5 * 1500 # at least 1/5 of all steps (1500 total) should be non-idle steps (this is equal to a minimum of 30s spent moving)
+
+# exclude low movement subjects for NEMO
+#createHist(data_NEMO, "IdleTime")
+data_NEMO = subset(data_NEMO, IdleTime <= lowMovCutoff)
+
+# exclude short logging time subjects for SILCTON
+#createHist(data_SILCTON, "TimeTrimmed")
+#createHist(data_SILCTON[data_SILCTON$exp == 2,], "TimeTrimmed")
+median(data_SILCTON[data_SILCTON$exp == 2,]$TimeTrimmed) # get median exploration time in exp 2
+data_SILCTON = subset(data_SILCTON, TimeTrimmed >= 10000)
+
+
+# check idle time percentages
+data_SILCTON$IdlePercent = data_SILCTON$IdleTime / data_SILCTON$TimeTrimmed
+#createHist(data_SILCTON, "IdlePercent") + xlim(c(0,1))
+
+data_NEMO$IdlePercent = data_NEMO$IdleTime / data_NEMO$TimeTrimmed
+#createHist(data_NEMO, "IdlePercent") + xlim(c(0,1))
+
+
+
+
+```
+
+
+
+# for NEMO and SILCTON data: remove subjects with high step length variance
+```{r}
+
+#######################
+ # remove subjects with extremely high step length variance
+
+### NEMO
+IQR = quantile(data_NEMO$StepLengthCoeffVar)[4] - quantile(data_NEMO$StepLengthCoeffVar)[2]
+extremeValuesUpperBoundary = quantile(data_NEMO$StepLengthCoeffVar)[4] + 3 * IQR
+data_NEMO = subset(data_NEMO, StepLengthCoeffVar <= extremeValuesUpperBoundary)
+#createHist(data_NEMO, "StepLengthCoeffVar")
+
+
+### SILCTON
+IQR = quantile(data_SILCTON$StepLengthCoeffVar)[4] - quantile(data_SILCTON$StepLengthCoeffVar)[2]
+extremeValuesUpperBoundary = quantile(data_SILCTON$StepLengthCoeffVar)[4] + 3 * IQR
+#createHist(data_SILCTON, "StepLengthCoeffVar") # note that the absolute values are still very low -> no exclusion necessary
+# data_SILCTON = subset(data_SILCTON, StepLengthCoeffVar <= extremeValuesUpperBoundary)
+
+
+
+
+
+
+```
+
+
+ # for NEMO and SILCTON data: remove subjects with high proportion of lag steps
+```{r}
+
+#######################
+ # remove subjects with high proportion of lag steps
+
+data_NEMO = subset(data_NEMO, LagStepsPercent <= 0.1)
+data_NEMO = droplevels.data.frame(data_NEMO)
+
+data_SILCTON = subset(data_SILCTON, LagStepsPercent <= 0.1)
+data_SILCTON = droplevels.data.frame(data_SILCTON)
+
+```
+
+
+# for NEMO and SILCTON data: check how many data points were lost by trimming trajectories
+```{r}
+
+# in absolute datapoints (no time allocation)
+data_NEMO$trimLoss = data_NEMO$TimeRaw - data_NEMO$TimeRawTrimmed
+data_SILCTON$trimLoss = data_SILCTON$TimeRaw - data_SILCTON$TimeTrimmed
+
+# # trim loss in seconds 
+# median(data_NEMO$trimLoss) # in datapoints
+# median(data_NEMO$trimLoss) / 10 # in seconds
+# sd(data_NEMO$trimLoss) / 10
+# 
+# # trim loss in seconds 
+# median(data_SILCTON$trimLoss) # in datapoints
+# median(data_SILCTON$trimLoss) / 10 # in seconds
+# sd(data_SILCTON$trimLoss) / 10
+
+
+```
+
+
+
+
+# demographics of final sample 
+```{r, fig.width=10, fig.height=5}
+
+
+#### NEMO
+createHist(data_NEMO[data_NEMO$Sex != "",], "Age", groupVar = "Sex", binwidth = 1) + theme_bw() + scale_x_continuous(breaks = seq(10, 80, by = 10))
+
+mean(data_NEMO$Age, na.rm = TRUE)
+median(data_NEMO$Age, na.rm = TRUE)
+sd(data_NEMO$Age, na.rm = TRUE)
+
+# get numbers of males/females/none
+nrow(data_NEMO[data_NEMO$Sex=="male",])
+nrow(data_NEMO[data_NEMO$Sex=="female",])
+nrow(data_NEMO[data_NEMO$Sex=="",])
+
+#### SILCTON
+nrow(data_SILCTON[data_SILCTON$gender=="male",])
+nrow(data_SILCTON[data_SILCTON$gender=="female",])
+
+
+
+```
+
+
+# VE comparison
+```{r}
+
+
+# compare VEs in step size, area covered and time
+median_StepLength_NEMO = 0.48
+median_StepLength_SILCTON = 0.5
+
+median(data_NEMO$TimeTrimmed, na.rm = TRUE) / 10 / 60
+sd(data_NEMO$TimeTrimmed, na.rm = TRUE) / 10
+median(data_NEMO$AreaCovered, na.rm = TRUE)
+sd(data_NEMO$AreaCovered, na.rm = TRUE)
+
+median(data_SILCTON$TimeTrimmed, na.rm = TRUE) / 10 / 60
+sd(data_SILCTON$TimeTrimmed, na.rm = TRUE) / 10
+median(data_SILCTON$AreaCovered, na.rm = TRUE)
+sd(data_SILCTON$AreaCovered, na.rm = TRUE)
+
+
+
+```
+
+
+
+
+# rename and invert some variables (inversion necessary for corrPlot)
+
+```{r}
+
+
+### NEMO
+data_NEMO$PausingInv = invert(data_NEMO$IdleTime)
+data_NEMO$ObjectRevisitsInv = invert(data_NEMO$ObjectRevisits)
+data_NEMO$numTurningPointsFlight160Inv = invert(data_NEMO$numTurningPointsFlight160)
+data_NEMO$numTurningPointsRaw160Inv = invert(data_NEMO$numTurningPointsRaw160)
+data_NEMO$numTurningPointsFlight180Inv = invert(data_NEMO$numTurningPointsFlight180)
+data_NEMO$numTurningPointsRaw180Inv = invert(data_NEMO$numTurningPointsRaw180)
+data_NEMO$RevisitingInv = invert(data_NEMO$Revisiting)
+
+
+### SILCTON
+data_SILCTON$PausingInv = invert(data_SILCTON$IdleTime)
+data_SILCTON$ObjectRevisitsInv = invert(data_SILCTON$ObjectRevisits)
+data_SILCTON$ObjectRevisits20Inv = invert(data_SILCTON$ObjectRevisits20)
+data_SILCTON$numTurningPointsFlight160Inv = invert(data_SILCTON$numTurningPointsFlight160)
+data_SILCTON$numTurningPointsRaw160Inv = invert(data_SILCTON$numTurningPointsRaw160)
+data_SILCTON$numTurningPointsFlight180Inv = invert(data_SILCTON$numTurningPointsFlight180)
+data_SILCTON$numTurningPointsRaw180Inv = invert(data_SILCTON$numTurningPointsRaw180)
+data_SILCTON$RevisitingInv = invert(data_SILCTON$Revisiting)
+data_SILCTON$Revisiting20Inv = invert(data_SILCTON$Revisiting20)
+
+```
+
+
+
+
+
+
+# variable clustering using the ClustOfVar library
+
+
+### standardize data
+```{r, echo=FALSE}
+
+
+# exclude any cases with NAs for any of the correlated params (important for simplified angles)
+data_NEMO_standardized <- as.data.frame(scale(select(data_NEMO,
+                                                         PathLength,
+                                                         PausingInv,
+                                                         AreaCovered, 
+                                                         RoamingEntropy, 
+                                                         MinimumPolygon,
+                                                         ObjectsVisited, 
+                                                         Sinuosity,
+                                                         FractalDimension,
+                                                         ObjectRevisitsInv,
+                                                         RevisitingInv,
+                                                         AreaEfficiency,
+                                                         ObjectEfficiency,
+                                                         numTurningPointsRaw180Inv,
+                                                         numTurningPointsFlight160Inv,
+                                                         )))
+
+data_NEMO_standardized = data_NEMO_standardized[complete.cases(data_NEMO_standardized), ]
+
+
+data_NEMO_young = data_NEMO[data_NEMO$Age < 15 &  !is.na(data_NEMO$Age),]
+data_NEMO_old = data_NEMO[data_NEMO$Age >= 15 &  !is.na(data_NEMO$Age),]
+
+
+
+
+data_NEMO_standardized_young <- as.data.frame(scale(select(data_NEMO[data_NEMO$Age < 15 &  !is.na(data_NEMO$Age),],
+                                                         PathLength,
+                                                         PausingInv,
+                                                         AreaCovered, 
+                                                         RoamingEntropy, 
+                                                         MinimumPolygon,
+                                                         ObjectsVisited, 
+                                                         Sinuosity,
+                                                         FractalDimension,
+                                                         ObjectRevisitsInv,
+                                                         RevisitingInv,
+                                                         AreaEfficiency,
+                                                         ObjectEfficiency,
+                                                         numTurningPointsRaw180Inv,
+                                                         numTurningPointsFlight160Inv,
+                                                         )))
+
+data_NEMO_standardized_young = data_NEMO_standardized_young[complete.cases(data_NEMO_standardized_young), ]
+
+
+
+
+data_NEMO_standardized_old <- as.data.frame(scale(select(data_NEMO[data_NEMO$Age >= 15 &  !is.na(data_NEMO$Age),],
+                                                         PathLength,
+                                                         PausingInv,
+                                                         AreaCovered, 
+                                                         RoamingEntropy, 
+                                                         MinimumPolygon,
+                                                         ObjectsVisited, 
+                                                         Sinuosity,
+                                                         FractalDimension,
+                                                         ObjectRevisitsInv,
+                                                         RevisitingInv,
+                                                         AreaEfficiency,
+                                                         ObjectEfficiency,
+                                                         numTurningPointsRaw180Inv,
+                                                         numTurningPointsFlight160Inv,
+                                                         )))
+
+data_NEMO_standardized_old = data_NEMO_standardized_old[complete.cases(data_NEMO_standardized_old), ]
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+### check linearity of relationships by plotting all scatterplots (CAVE: takes a very long time if displayed inside the rmd notebook)
+
+```{r, echo=FALSE, fig.width=20, fig.height=20}
+
+# movParams_NEMO = data_NEMO_standardized
+# corrPlotNEMO = ggpairs(movParams_NEMO)
+# ggsave(plot= corrPlotNEMO, filename = "corrPLotNEMO.png", device = "png", width = 20, height = 20)
+
+
+```
+
+
+
+
+##### NEMO
+
+### create correlation plot using the corrPlot package
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+movParams_NEMO = data_NEMO_standardized
+
+setnames(movParams_NEMO, old = colnames(movParams_NEMO), new = c('Path Length','Pausing','Area Covered','Roaming Entropy','Minimum Polygon','Landmarks Visited','Sinuosity','Fractal Dimension','Landmark Revisits','Revisiting','Area Efficiency','Landmark Efficiency',"Turnarounds", 'Flight Turnarounds'))
+
+
+corrMatrix_NEMO = cor(movParams_NEMO)
+# note that cluster boxes are determined by hclust algorithm (same result as ClustofVar)
+corrplot(corrMatrix_NEMO, method = "color", order = "hclust", addrect = 4, tl.col = 'black', tl.cex = 1.5, cl.cex = 1.3, family = "Calibri") 
+
+# note that cluster boxes are determined by hclust algorithm (same result as ClustofVar)
+corrplot(corrMatrix_NEMO^2, method = "color", order = "hclust", tl.col = 'black', tl.cex = 1.5, cl.cex = 1.3, family = "Calibri") 
+
+# note that cluster boxes are determined by hclust algorithm (same result as ClustofVar)
+corrplot(corrMatrix_NEMO, method = "color", order = "hclust", addrect = 4, tl.col = 'black', tl.cex = 1.5, cl.cex = 1.3, family = "Calibri", hclust.method = "ward.D") 
+
+
+```
+
+
+
+# run hierarchical clustering (using ClustOfVar)
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+# run clustering and plot tree
+clustTree_NEMO <- hclustvar(movParams_NEMO)
+plot(clustTree_NEMO, type = "tree") # plot dendrogram
+plot(clustTree_NEMO, type = "index") # plot elbow graph
+
+# run additional diagnostics
+stability_NEMO = stability(clustTree_NEMO, B = 40) 
+boxplot(stability_NEMO$matCR, main = "Dispersion of the adjusted Rand index (NEMO")
+
+
+```
+
+
+
+# make a nicer dendrogram & aggregation levels plot
+
+```{r, fig.width=8, fig.height=6}
+
+
+#### NEMO
+clustTreeHclust_NEMO = clustTree_NEMO
+class(clustTreeHclust_NEMO) = "hclust" # change object class for integration with ggdendro
+
+ggdendrogram(clustTreeHclust_NEMO, rotate = FALSE, size = 2, theme_dendro = FALSE) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=20, family = "Calibri"), axis.text.y = element_text(size=20, family = "Calibri"), axis.title.x=element_blank(), axis.title.y=element_text(size = 20, face = "plain", family = "Calibri"), plot.title=element_text(size=20,face="bold", family = "Calibri")) +
+  ylab("height") +
+  ggtitle("NEMO (< 15 years old)", )
+
+
+
+
+```
+
+
+
+```{r, fig.width=8, fig.height=6}
+
+
+#### NEMO
+heights_NEMO = clustTree_NEMO$height
+nums_NEMO = seq(13,1)
+aggregationLevels_NEMO = data.frame(heights_NEMO, nums_NEMO)
+aggregationLevels_NEMO$nums_NEMO = as.factor(aggregationLevels_NEMO$nums_NEMO)
+
+ggplot(data = aggregationLevels_NEMO, aes(x = nums_NEMO, y = heights_NEMO)) +
+  geom_point() +
+  theme_bw() +
+  xlab("number of clusters") +
+  ylab("aggregation level") +
+  theme(axis.text.x = element_text(size=20, family = "Calibri"), axis.text.y = element_text(size=20, family = "Calibri"), axis.title.x=element_text(size=20, family = "Calibri", face = "plain"), axis.title.y=element_text(size=20, family = "Calibri", face = "plain"))
+  #geom_vline(xintercept = 4, size = 2, alpha = 0.5, colour = "darkblue") +
+  #geom_line(group = 1, linetype = "dotted")+
+
+
+
+
+```
+
+
+# show that results are similar using another clustering algorithm (hclust)
+
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+# # https://github.com/taiyun/corrplot/blob/master/R/corrRect.hclust.R
+# # replicate the clustering underlying corrplot()
+# distMatrixCorr = as.dist(1 - corrMatrix_NEMO)
+# # # run hierarchical clustering
+# hcCorr <- hclust(distMatrixCorr, method = "complete")
+# # # plot results as Dendrogram
+# plot(hcCorr)
+
+
+
+```
+
+
+
+
+# rerun clustering without turnarounds (using ClustOfVar) and get cluster loadings
+
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+
+#### NEMO
+movParams_NEMO = select(movParams_NEMO, !Turnarounds) # exclude turnarounds
+
+
+# run clustering and plot tree
+clustTree_NEMO <- hclustvar(movParams_NEMO)
+plot(clustTree_NEMO, type = "tree")
+
+
+
+```
+
+
+### get all loadings 
+
+```{r}
+
+# extract clusters and show variable loading on cluster
+clusters_NEMO = cutreevar(clustTree_NEMO, k = 3) # assume 3 clusters
+#plot(clusters_NEMO)
+
+# now, get synthetic variable values for each cluster and add them to the main dataframe
+# invert synthetic variable score for cluster 1 so the correlation of features and synthetic variable is positive
+data_NEMO$ExploratoryActivity = clusters_NEMO$scores[,1] * -1 
+data_NEMO$SpatialShape = clusters_NEMO$scores[,2]
+data_NEMO$ExplorationEfficiency = clusters_NEMO$scores[,3]
+
+# correlate cluster scores with all the underlying features
+cor(movParams_NEMO, data_NEMO$ExploratoryActivity ) 
+cor(movParams_NEMO, data_NEMO$SpatialShape)
+cor(movParams_NEMO, data_NEMO$ExplorationEfficiency)
+     
+
+```
+
+
+
+##### SILCTON
+
+
+# variable clustering using the ClustOfVar library
+
+
+### standardize data
+```{r, echo=FALSE}
+
+
+# exclude any cases with NAs for any of the correlated params (important for simplified angles)
+data_SILCTON_standardized <- as.data.frame(scale(select(data_SILCTON[data_SILCTON$exp==2,],
+                                                         PathLength,
+                                                         PausingInv,
+                                                         AreaCovered, 
+                                                         RoamingEntropy,
+                                                         MinimumPolygon,
+                                                         ObjectsVisited, 
+                                                         Sinuosity,
+                                                         FractalDimension,
+                                                         ObjectRevisitsInv,
+                                                         RevisitingInv,
+                                                         AreaEfficiency,
+                                                         ObjectEfficiency,
+                                                         #numTurningPointsRaw180Inv,
+                                                         numTurningPointsFlight160Inv,
+                                                         )))
+
+
+
+data_SILCTON_standardized = data_SILCTON_standardized[complete.cases(data_SILCTON_standardized), ]
+
+
+```
+
+
+### check linearity of relationships by plotting all scatterplots (CAVE: takes a very long time if displayed inside the rmd notebook)
+
+```{r, echo=FALSE, fig.width=20, fig.height=20}
+# 
+# 
+# corrPlotSILCTON = ggpairs(movParams_SILCTON)
+# ggsave(plot = corrPlotSilcton, filename = "corrPLotSILCTON.png", device = "png", width = 20, height = 20)
+
+
+```
+
+
+
+### create correlation plot using the corrPlot package
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+
+movParams_SILCTON = data_SILCTON_standardized
+
+setnames(movParams_SILCTON, old = colnames(movParams_SILCTON), new = c('Path Length','Pausing','Area Covered','Roaming Entropy','Minimum Polygon','Landmarks Visited','Sinuosity','Fractal Dimension','Landmark Revisits','Revisiting','Area Efficiency','Landmark Efficiency','Flight Turnarounds'))
+
+
+corrMatrix_SILCTON = cor(movParams_SILCTON)
+# note that cluster boxes are determined by hclust algorithm (same result as ClustofVar)
+
+
+corrplot(corrMatrix_SILCTON, method = "color", order = "hclust", addrect = 5, tl.col = 'black', tl.cex = 1.5, cl.cex = 1.3, family = "Calibri", hclust.method = "ward.D")
+ 
+
+
+
+
+
+```
+
+
+
+
+
+# run hierarchical clustering (using ClustOfVar)
+```{r, echo=FALSE, fig.width=9, fig.height=9}
+
+
+# run clustering and plot tree
+clustTree_SILCTON <- hclustvar(movParams_SILCTON)
+plot(clustTree_SILCTON, type = "tree") # plot dendrogram
+plot(clustTree_SILCTON, type = "index") # plot elbow graph
+
+# run additional diagnostics
+stability_SILCTON = stability(clustTree_SILCTON, B = 40) 
+boxplot(stability_SILCTON$matCR, main = "Dispersion of the adjusted Rand index (SILCTON")
+
+
+
+```
+
+
+
+
+# make a nicer dendrogram & aggregation levels plot
+
+```{r, fig.width=8, fig.height=6}
+
+#### SILCTON
+clustTreeHclust_SILCTON = clustTree_SILCTON
+class(clustTreeHclust_SILCTON) = "hclust" # change object class for integration with ggdendro
+
+ggdendrogram(clustTreeHclust_SILCTON, rotate = FALSE, size = 2, theme_dendro = FALSE) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=20, family = "Calibri"), axis.text.y = element_text(size=20, family = "Calibri"), axis.title.x=element_blank(), axis.title.y=element_text(size = 20, face = "plain", family = "Calibri"), plot.title=element_text(size=20,face="bold", family = "Calibri")) +
+  ylab("height") +
+  ggtitle("SILCTON, Experiment 2", )
+
+
+
+
+```
+
+
+```{r, fig.width=8, fig.height=6}
+
+#### SILCTON
+heights_SILCTON = clustTree_SILCTON$height
+nums_SILCTON = seq(12,1)
+aggregationLevels_SILCTON = data.frame(heights_SILCTON, nums_SILCTON)
+aggregationLevels_SILCTON$nums_SILCTON = as.factor(aggregationLevels_SILCTON$nums_SILCTON)
+
+ggplot(data = aggregationLevels_SILCTON, aes(x = nums_SILCTON, y = heights_SILCTON)) +
+  geom_point() +
+  theme_bw() +
+  xlab("number of clusters") +
+  ylab("aggregation level") +
+  theme(axis.text.x = element_text(size=20, family = "Calibri"), axis.text.y = element_text(size=20, family = "Calibri"), axis.title.x=element_text(size=20, family = "Calibri", face = "plain"), axis.title.y=element_text(size=20, family = "Calibri", face = "plain"))
+  #geom_vline(xintercept = 4, size = 2, alpha = 0.5, colour = "darkblue") +
+  #geom_line(group = 1, linetype = "dotted")+
+
+
+
+```
+
+### get all loadings 
+
+```{r}
+
+# extract clusters and show variable loading on cluster
+clusters_SILCTON = cutreevar(clustTree_SILCTON, k = 5) # assume 5 clusters
+#plot(clusters_SILCTON)
+
+
+# now, get synthetic variable values for each cluster and add them to the main dataframe
+# invert synthetic variable score for cluster 4 so the correlation of features and synthetic variable is positive
+data_SILCTON$ExploratoryActivity = clusters_SILCTON$scores[,1]  
+data_SILCTON$AreaEfficiency = clusters_SILCTON$scores[,2]
+data_SILCTON$GoalEfficiency = clusters_SILCTON$scores[,3] * -1
+data_SILCTON$SpatialShape = clusters_SILCTON$scores[,4] * -1
+
+
+# correlate cluster scores with all the underlying features
+cor(movParams_SILCTON, data_SILCTON$ExploratoryActivity ) 
+cor(movParams_SILCTON, data_SILCTON$SpatialShape)
+cor(movParams_SILCTON, data_SILCTON$AreaEfficiency)
+cor(movParams_SILCTON, data_SILCTON$GoalEfficiency)     
+                                                 
+#ExploratoryActivity_SILCTON = clusters_SILCTON$scores[,1] * -1
+#SpatialShape_SILCTON = clusters_SILCTON$scores[,2]
+#ExplorationEfficiency_SILCTON = clusters_SILCTON$scores[,3]
+# 
+# cor(movParams_SILCTON, ExploratoryActivity_SILCTON) 
+# cor(movParams_SILCTON, SpatialShape_SILCTON)
+# cor(movParams_SILCTON, ExplorationEfficiency_SILCTON)
+# 
+
+```

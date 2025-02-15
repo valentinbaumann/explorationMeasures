@@ -11,7 +11,7 @@ import math
 import traja as trj # traja package (https://github.com/traja-team/traja)
 import pandas as pd
 from scipy import stats
-
+from scipy import spatial as sp
 
 
 
@@ -22,24 +22,13 @@ def computePathLength(path, dimension = "2d"):
     """Returns the total length of the path."""
     pathLength = np.sum(computeStepLength(path, dimension))
     return pathLength
+
 def getPathLength(paths, dimension = "2d"):
         """Returns the total length of the path."""
         res = []
         for p in paths:
             res.append(computePathLength(p, dimension))
         return np.asarray(res)
-
-
-
-def getHistoryStepLength(paths, dimension = "2d", includeZeroSteps = True):
-     """Returns the sequence of step lengths for each paths. Set includeZeroSteps to FALSE if only non-zero steps should be included."""
-     res = []   
-     for p in paths:
-         stepHistory = computeStepLength(p, dimension)
-         if includeZeroSteps == False:
-             stepHistory = stepHistory[stepHistory > 0]
-         res.append(stepHistory)
-     return res
 
 
 # single path based functions with step wise return:
@@ -57,6 +46,16 @@ def computeStepLength(path, dimension = "2d"):
     elif dimension == "y":
         res = np.sqrt(np.sum((path[:-1,[1]]-path[1:,[1]])**2,axis=1))
     return res
+
+def getHistoryStepLength(paths, dimension = "2d", includeZeroSteps = True):
+     """Returns the sequence of step lengths for each paths. Set includeZeroSteps to FALSE if only non-zero steps should be included."""
+     res = []   
+     for p in paths:
+         stepHistory = computeStepLength(p, dimension)
+         if includeZeroSteps == False:
+             stepHistory = stepHistory[stepHistory > 0]
+         res.append(stepHistory)
+     return res
 
 
 def computeLagStepPercent(stepHistory, cutoffMultiplier):
@@ -83,8 +82,8 @@ def getLagStepPercent(stepHistories, cutoffMultiplier):
 
 def computeTime(path):
     """Returns the time spent exploring. Note that "time" is represented as the number of datapoints rather than an actual time unit, so the interpretation relies on the sampling rate. """
-
     return len(path)
+
 def getTime(paths):
         """Returns the time spent exploring for a list of trajectories as a numpy array. Note that "time" is represented as the number of datapoints rather than an actual time unit, so the interpretation relies on the sampling rate."""
         res = []
@@ -93,24 +92,8 @@ def getTime(paths):
         return np.asarray(res)
 
 
-def getIdleTime(paths, mode, dim):
-    """Returns the number or the percentage of steps (indicated by mode = "raw" or mode = "percent") without movement. """
-    # Note: trimming of the path alters the resulting idle time.
-    res = []
-    for p in paths:
-        res.append(computeIdleTime(p, mode, dim))
-    return np.asarray(res)
-
-def computeIdleTimePeriods(paths, minDuration):
-    """Returns the count of idle time periods with a duration greater than minDuration."""
-    # Note: trimming of the path alters the resulting idle time.
-    res = []
-    for p in paths:
-        res.append(getIdleTimePeriods(p, minDuration))
-    return np.asarray(res)
-
 # get raw number or percentage of events without movement in any of the possible dimensions
-def computeIdleTime(path, mode, dim): 
+def computeTotalIdleTime(path, mode, dim): 
     steps = computeStepLength(path, dim)
     if mode == "raw":
         idle_time = len(path) - np.count_nonzero(steps) # raw number of steps without any movement
@@ -118,36 +101,88 @@ def computeIdleTime(path, mode, dim):
         idle_time = 1 - (np.count_nonzero(steps)/len(path)) # percentage of steps without any movement
     return idle_time
 
-# get the number of idle events with a predefined minimum idle duration
-def getIdleTimePeriods(path, minDuration): 
+def getTotalIdleTime(paths, mode, dim):
+    """Returns the number or the percentage of steps (indicated by mode = "raw" or mode = "percent") without movement. """
+    # Note: trimming of the path alters the resulting idle time.
+    res = []
+    for p in paths:
+        res.append(computeTotalIdleTime(p, mode, dim))
+    return np.asarray(res)
+
+def computeIdlePeriods(path): 
+    """Returns a 2d array with the start and end points of all idle time periods"""
     tmp = computeStepLength(path, "3d")
     iszero = np.concatenate(([0], np.equal(tmp, 0).view(np.int8), [0])) # Create an array that is 1 where a is 0, and pad each end with an extra 0.
     absdiff = np.abs(np.diff(iszero)) # give start of zero sequence as well as the first nonzero element after the sequence
     periodRanges = np.where(absdiff == 1)[0].reshape(-1, 2) # get an array with the index ranges of all 0 sequences 
-    periodDuration = periodRanges[:,1] - periodRanges[:,0]
-    periodCount = len(np.where(periodDuration >= minDuration)[0]) # get number of idle times with durations >= the predefined Duratiom
+    return periodRanges
+
+def getIdleTimePeriods(paths):
+    """Returns all idle time periods for all trajectories."""
+    # Note: trimming of the path alters the resulting idle time.
+    res = []
+    for p in paths:
+        res.append(computeIdlePeriods(p))
+    return np.asarray(res)
+
+def computeNumIdlePeriods(path, duration):
+    """Returns the number of idle time periods, given a minimal duration (duration is measured in data points logged)"""
+    periodRanges = computeIdlePeriods(path)
+    periodDurations = periodRanges[:,1] - periodRanges[:,0]
+    periodCount = len(np.where(periodDurations >= duration)[0]) # get number of idle times with durations >= the predefined Duratiom
     return periodCount
 
-def getMaxIdleTimePeriod(path): 
-    """Get length of the longest idle time period."""
-    tmp = computeStepLength(path, "3d")
-    iszero = np.concatenate(([0], np.equal(tmp, 0).view(np.int8), [0])) # Create an array that is 1 where a is 0, and pad each end with an extra 0.
-    absdiff = np.abs(np.diff(iszero)) # give start of zero sequence as well as the first nonzero element after the sequence
-    periodRanges = np.where(absdiff == 1)[0].reshape(-1, 2) # get an array with the index ranges of all 0 sequences 
-    periodDuration = periodRanges[:,1] - periodRanges[:,0]
-    maxDuration = np.max(periodDuration)   
+def getNumIdleTimePeriods(paths, duration):
+    """Returns the count of idle time periods with a duration greater than minDuration."""
+    # Note: trimming of the path alters the resulting idle time.
+    res = []
+    for p in paths:
+        res.append(computeNumIdlePeriods(p, duration))
+    return np.asarray(res)
+
+def computeMaxIdlePeriod(path):
+    """Returns the length of the longest idle time period"""
+    periodRanges = computeIdlePeriods(path)
+    periodDurations = periodRanges[:,1] - periodRanges[:,0]
+    maxDuration = np.max(periodDurations)
     return maxDuration
 
-
-def computeMaxIdleTimePeriod(paths):
+def getMaxIdleTimePeriod(paths):
     """Returns the the length of the longest idle time period."""
     # Note: trimming of the path alters the resulting idle time.
     res = []
     for p in paths:
-        res.append(getMaxIdleTimePeriod(p))
+        res.append(computeMaxIdlePeriod(p))
     return np.asarray(res)
 
 
+def deleteIdlePeriodsfromTraj(path, duration):
+    """takes a single trajectory and deletes all idle time periods greater than a given duration (duration is measured in data points logged). Returns the trimmed trajectory as a numpy array."""
+  
+    # get idle time periods
+    periodRanges = computeIdlePeriods(path)
+    # get all idle sequences >= duration
+    periodDurations = periodRanges[:,1] - periodRanges[:,0]
+    periodFilter = np.where(periodDurations >= duration)[0]
+    periodRangesFiltered = periodRanges[periodFilter,]
+    
+    # create filter for the original trajectory
+    filterTrajectory = np.array([])
+    for i in range(len(periodRangesFiltered)):
+        mySequence = np.arange(periodRangesFiltered[i,0],periodRangesFiltered[i,1])
+        filterTrajectory = np.append(filterTrajectory, mySequence)
+    
+    # delete all zero sequences
+    pathTrimmed = np.delete(path, filterTrajectory.astype(int), axis = 0)
+    return pathTrimmed
+    
+def deleteIdlePeriodsfromTrajGroup(paths, duration):
+    """takes a group of trajectories and deletes all idle time periods greater than a given duration (duration is measured in data points logged).
+        Returns the trimmed trajectories as a list of numpy arrays."""
+    res = []
+    for p in paths:
+        res.append(deleteIdlePeriodsfromTraj(p, duration))
+    return res 
 
 
 #%%
@@ -159,31 +194,30 @@ def computeMaxIdleTimePeriod(paths):
 # if k is unknown, it may be approximated via:
 # - the number of bins inside the respective bounding box
 # - the number of bins accessed by at least one subject
-def computeAreaCovered(paths, bins, bbox, k = 1):   
-    """Returns the total area covered by the path."""
+
+
+def computeAreaCovered(paths, binSize, k = 1):   
+    """Returns the total area covered by the path. Use k > 1, if you want to get a percentage of bins cavered rather than an absolute value (default: k = 1). """
     res = np.zeros((len(paths)))
+    binNum = defineHist(binSize, paths)[0]
+    bbox = defineHist(binSize, paths)[1]
     for i in range(len(paths)):
-        res[i] = np.sum(computeHistogram([paths[i]], bins, bbox)>0)/k # counts all bins where value is > 0 and norms by k
+        res[i] = np.sum(computeHistogram([paths[i]], binNum, bbox)>0)/k # counts all bins where value is > 0 and norms by k
     return res
 
-
-
-def computeCountBinsCovered(paths, bins, bbox):
-    """Returns the overall number of all bins covered by any participant."""
-    hist = computeHistogram(paths, bins, bbox)
-    CountBinsCovered = np.count_nonzero(hist)
-    return CountBinsCovered
 
 # roaming entropy
 # k is defined as the total number of accessible bins (guarantees a normalization of entropy values to be able to compare VEs of different sizes)
 # if k is unknown, it may be approximated via:
 # - the number of bins inside the respective bounding box
 # - the number of bins accessed by at least one subject
-def computeRoamingEntropy(paths, bins, bbox, k):
+def computeRoamingEntropy(paths, binSize, k):
     """Returns the total area covered by the path."""
     res = np.zeros((len(paths)))
+    binNum = defineHist(binSize, paths)[0]
+    bbox = defineHist(binSize, paths)[1]
     for i in range(len(paths)):
-        hist = computeHistogram([paths[i]], bins, bbox) # compute histogram with frequencies
+        hist = computeHistogram([paths[i]], binNum, bbox) # compute histogram with frequencies
         histProbs= hist / np.sum(hist) # convert frequencies to probabilities
         # calculate roaming entropy
         # for undefined values: if probability is zero, set log2(prob) to zero (Ref: https://stats.stackexchange.com/questions/57069/alternative-to-shannons-entropy-when-probability-equal-to-zero)
@@ -192,7 +226,7 @@ def computeRoamingEntropy(paths, bins, bbox, k):
 
 
 def computeHistogram(paths, bins, bbox):
-    """Returns a histogram of the data provided"""
+    """Returns a histogram of the trajectory, representing all datapoints logged in the given bins."""
     hist = np.histogram2d(paths[0][:,0], paths[0][:,2], bins, bbox)[0]
     for p in paths[1:]:
         hist += np.histogram2d(p[:,0], p[:,2], bins, bbox)[0]
@@ -200,13 +234,35 @@ def computeHistogram(paths, bins, bbox):
 
 
 def computeHistBinsEntered(paths, bins, bbox):
-    """Returns a list of 2d historgrams where bins entered/undiscovered are coded qith 1/0 respectively """
+    """Returns a histogram of the trajectory, where bins entered/undiscovered are coded with 1/0 respectively """
     res = []
     for i in range(len(paths)):
         myhist = computeHistogram([paths[i]], bins, bbox)
         mymask = (myhist > 0).astype(int) # set visited bins to one 
         res.append(mymask)
     return res
+
+
+
+
+#%%
+# functions on minimum complex polygon / activity space
+
+def computeMinimumPolygon(path):
+   """Returns the area of the smallest convex polygon /smallest convex hull covering all datapoints of a single trajectory.
+   Requires a 2d trajectory."""   
+   hull = sp.ConvexHull(path)
+   hullArea = hull.volume
+   return hullArea
+
+def getMinimumPolygon(paths):
+   """Returns the area of the smallest convex polygon /smallest convex hull covering all datapoints of a group of trajectories.
+   Requires 2d trajectories."""   
+   res = []
+   for p in paths:
+       res.append(computeMinimumPolygon(p))
+   return np.asarray(res)
+
 
 
 
@@ -291,8 +347,50 @@ def getRevisiting(paths, radius, method = "Gagnon", refractoryPeriod = 1):
 # functions on objects
 
 
+
+# uses euclidian distance
+def computeObjDistStepwise(path, obj):
+    """computes an array with the euclidian distance of a given trajectory to one given object across time.
+    CAVE: requires a 2d trajectory and 2d object coordinates.""" 
+    return np.sqrt(np.sum((path-obj)**2,axis=1))
+
+def computeObjVisits(path, objects, maxDistance, minDuration, minTimeRevisit):
+    """returns a list of arrays, with each array representing visits for one object.
+    Use maxDistance to specify the radius around the objects.
+    Use minDuration > 0, if a vsisit additionally should be defined by the time spent within the object radius.
+    Use minTmeRevisit to set a period, where Revisits are not counted (after an individual left the object radius).
+    CAVE: requires a 2d trajectory and 2d object coordinates."""         
+    
+    list_periods= []
+    objDistances = np.zeros((len(path),1))
+    for i in range(len(objects)):
+            
+            objDistances = computeObjDistStepwise(path, objects[i,:])
+
+            mask_array = objDistances <= maxDistance # array is TRUE whenever position is within maxDistance around object
+            mask_array = mask_array.astype(int) # convert bools to int
+            iszero = np.concatenate(([0], mask_array, [0])) # pad a zero at each end
+    
+            absdiff = np.abs(np.diff(iszero)) # give start of zero sequence as well as the first nonzero element after the sequence
+            periodRanges = np.where(absdiff == 1)[0].reshape(-1, 2) # get an array with the index ranges of all 0 sequences 
+ 
+            periodDuration = periodRanges[:,1] - periodRanges[:,0] # calculate duration of each period
+            periodRanges = periodRanges[periodDuration >= minDuration] # select only periods with a duration > minDuration
+
+            periodDistance = periodRanges[1:,0] - periodRanges[0:-1,1] # calculate distances between periods
+            periodRanges = periodRanges[1:][periodDistance >= minTimeRevisit] # select only periods with a distance to the previous period > minTimeRevisit
+            
+            list_periods.append(periodRanges)
+            
+    return list_periods
+
+
+
 def getNumObjVisited(paths, objects, maxDistance, minDuration, minTimeRevisit):
-    """returns the number of objects visited at least once"""        
+    """returns the number of objects visited at least once. 
+    Use maxDistance to sepcify the radius around the objects.
+    Use minDuration > 0, if a vsisit additionally should be defined by the time spent within the object radius.
+    Use minTmeRevisit to set a period, where Revisits are not counted (after an individual left the object radius)."""        
     totalVisits = [] 
     for p in paths:
         objPeriods = computeObjVisits(p, objects, maxDistance, minDuration, minTimeRevisit)
@@ -314,7 +412,10 @@ def getNumObjVisited(paths, objects, maxDistance, minDuration, minTimeRevisit):
 
 
 def getNumObjVisits(paths, objects, maxDistance, minDuration, minTimeRevisit):
-    """returns the total number of object visits, including revisits"""       
+    """returns the total number of object visits, including revisits.   
+    Use maxDistance to sepcify the radius around the objects.
+    Use minDuration > 0, if a vsisit additionally should be defined by the time spent within the object radius.
+    Use minTmeRevisit to set a period, where Revisits are not counted (after an individual left the object radius)."""             
     totalPeriods = [] 
     for p in paths:
         objPeriods = computeObjVisits(p, objects, maxDistance, minDuration, minTimeRevisit)
@@ -332,149 +433,25 @@ def getNumObjVisits(paths, objects, maxDistance, minDuration, minTimeRevisit):
 
 
 
-# maxDistance: max distance to object counting as a "visit" (corresponds to a circle around object with radius of maxDistance)
-# minDuration: minimal duration of a visit
-# minTimeRevisit: minimal time between visits to define "true" revisits
-# CAVE: assumes a constant sampling rate
-def computeObjVisits(path, objects, maxDistance, minDuration, minTimeRevisit):
-    """returns a list arrays, with each array representing visits for one object.
-    
-    
-    """
-    list_periods= []
-    objDistances = np.zeros((len(path),1))
-    for i in range(len(objects)):
-            
-            objDistances = computeObjDistStepwise(path, objects[i,:])
-
-            mask_array = objDistances <= maxDistance # array is TRUE whenever position is within maxDistance around object
-            mask_array = mask_array.astype(int) # convert bools to int
-            iszero = np.concatenate(([0], mask_array, [0])) # pad a zero at each end
-    
-            absdiff = np.abs(np.diff(iszero)) # give start of zero sequence as well as the first nonzero element after the sequence
-            periodRanges = np.where(absdiff == 1)[0].reshape(-1, 2) # get an array with the index ranges of all 0 sequences 
- 
-            # filter for min duration
-            periodDuration = periodRanges[:,1] - periodRanges[:,0] # Duration of each period
-            periodRanges = periodRanges[periodDuration >= minDuration]
-
-            periodDistance = periodRanges[1:,0] - periodRanges[0:-1,1] # Distances between periods
-            # if there is at least one period, add a large "Distance" for first period that is longer than minDuration  
-            if len(periodRanges) > 0:
-                periodDistance = np.concatenate(([10000], periodDistance))           
-            periodRanges = periodRanges[periodDistance >= minTimeRevisit]
-            
-            list_periods.append(periodRanges)
-            
-    return list_periods
-
-
-# get array with object distances for each datapoint and object
-def getObjDistances(path, objects):
-    """Returns an array with object distances for each datapoint and object (columns represent objects, rows represent datapoints)"""
-
-    objDistances = np.zeros((len(path),len(objects)))
-    for i in range(np.shape(objects)[0]):
-            objDistances[:,i] = computeObjDistStepwise(path, objects[i,:])
-
-    return objDistances
-
-
-def getHistoryMinObjDist(paths, objects):
-    """Returns a list of arrays, where each array contains the minimal distance to the nearest object at each step"""
-    res = []    
-    for p in  paths:
-        Distances = getObjDistances(p, objects)
-        minDistanceHistory = np.min(Distances, axis=1)    
-        res.append(minDistanceHistory)
-    return res
-
-
-
-def computeMinDistanceObjectWise(path, objects):
-    """Returns the minimal distance to each of the objects."""
-    res = np.zeros((len(objects),1))
-    for i in range(len(objects)):
-            res[i] = np.min(computeObjDistStepwise(path,objects[i,:]),axis=0)
-    return res
- 
-
-def computeMinDistanceObjectWiseALL(paths, objects):
-    """Returns the minimal distance to each of the objects."""
-    res = np.zeros((len(paths), len(objects)))
-    for i in range(len(paths)):
-        for j in range(len(objects)):
-            res[i,j] = np.min(computeObjDistStepwise(paths[i],objects[j,:]),axis=0)
-    return res
-
-
-# uses euclidian distance
-def computeObjDistStepwise(path, obj):
-    return np.sqrt(np.sum((path-obj)**2,axis=1))
-
-
-
-# get object history for a single path
-def getObjectHistory(path, myobjects, areaSize):
-    # remove inital start location from object dataframe (irrelevant for object computations)
-    #myobjects = myobjects.loc[myobjects["Landmark"] != "START"]
-    # initialize empty array with number of rows euql to path length and number of columns equal to number of objects
-    # multiple columns prevent overwriting if object areas intersect with each other
-    pathObjects = np.full((len(path), len(myobjects.index)), "--------------------") # input a dummy string of 20 characters
-    
-    # check if path is within area around object
-    for index, row in myobjects.iterrows():
-        objectName = myobjects["Landmark"].iloc[index]
-        objectX = myobjects["X"].iloc[index]
-        objectZ = myobjects["Z"].iloc[index]
-        
-        # test whether object i is within area (here:circle with radius "areaSize"). If yes, change array values to "objectName"
-        pathObjects[:,index] = np.where(np.sqrt((path[:,0] - objectX) ** 2 + (path[:,2] - objectZ) ** 2) <= areaSize,       # where t2 > 5
-                        objectName,                     # put 10
-                        pathObjects[:,index])                 # into the third column of t1
-        pathObjects = np.where(pathObjects == "--------------------", np.nan, pathObjects)       
-
-    return pathObjects
-
-
-def computeObjectVicinityTime(paths, myobjects, areaSize):
-    res = []
-    for p in paths:
-        objHistory = getObjectHistory(p, myobjects, areaSize) # get array of object history 
-        objTime = np.sum(~np.isnan(objHistory)) # count all non nan elements in object history array to get vicinity time
-        res.append(objTime)
-    return np.asarray(res)
-    
-
-
-
 
 #%%
 # functions on angles
-
-#  get list of angle array for multiple paths
-def getHistoryAngles(paths, span=1, angleType = "degree"):
-    res = []
-    for p in paths:
-        res.append(computeAngles(p, span, angleType))
-    return res
+# this is based on 2d direction vectors (from x and z coordinates) 
+# inspired by: https://stackoverflow.com/questions/28260962/calculating-angles-between-line-segments-python-with-math-atan2
 
 # gives changes in turning angles in degrees
-# needs a 2d path input
-# this is based on 2d direction vectors (from x and z coordinates) 
-# the "span" argument can be used to specify across how many datapoints a single vector is calculated (vectors with step = 1 are vectors with a span of 1 datapoint, vectors with size n span across n datapoints)
-# higher span sizes should basically give lower frequency turning angles
-# inspired by: https://stackoverflow.com/questions/28260962/calculating-angles-between-line-segments-python-with-math-atan2
 def computeAngles(path2d, span=1, angleType = "degree"):
-    """Compute turning angles in degrees or radians (specify via angle type). Input needs to be 2d (x and z coordinates). 
-    Angles are calculated as absolute values (neglects left/right turning)."""   
+    """Compute an array representing the sequence of turning angles. 
+    Use span to define if angles are computed from step to step (span = 1), or if steps should be omiited (giving higher vs. lower frequency turning angles).
+    Use angleType to specify if the output is in degrees or radians (default is degrees)..
+    Trajectoires need to be provided as 2d arrays (x and z coordinates). 
+    Note that angles are calculated as absolute values (neglects left/right turning)."""
     
     if np.shape(path2d)[1] > 2:
         raise Exception('Please check if 2d path is provided.')
     
     mypath = path2d[::span].copy() # path subsample based on "span" 
 
-    #vectors = mypath[1:,[0,2]]-mypath[:-1,[0,2]] # get direction vectors for each step (from x and z coordinates)
     vectors = mypath[1:,]-mypath[:-1,]
 
     dotProd = vectors[1:,0] * vectors[:-1,0] + vectors[1:,1] * vectors[:-1,1] # get dot product for two consecutive vectors
@@ -494,6 +471,19 @@ def computeAngles(path2d, span=1, angleType = "degree"):
     return angles
 
 
+#  get list of angle array for multiple paths
+def getHistoryAngles(paths, span=1, angleType = "degree"):
+    ''' Return a list of arrays, where each array represents the sequence of turning angles. 
+    Use span to define if angles are computed from step to step (span = 1), or if steps should be omiited (giving higher vs. lower frequency turning angles).
+    Use angleType to specify if the output is in degrees or radians (default is degrees).
+    Trajectoires need to be provided as 2d arrays (x and z coordinates). 
+    Note that angles are calculated as absolute values (neglects left/right turning).''' 
+    res = []
+    for p in paths:
+        res.append(computeAngles(p, span, angleType))
+    return res
+
+# use angle computation from the traja package for crossvalidation
 def getHistoryAnglesTraja(traja_paths, absolutValues = "yes"):
     res = []
     for p in traja_paths:
@@ -509,19 +499,27 @@ def getHistoryAnglesTraja(traja_paths, absolutValues = "yes"):
 
 # number of "valuable turning points"
 # similar to here: https://www.gakhov.com/articles/find-turning-points-for-a-trajectory-in-python.html
-def computeTurningPoints (path, minAngle):
-    """Run this function on a RDP-simplified path to get the most turning points of a trajectory (given a minimal angle defining a "turning point" in degrees). 
-    Input needs to be 2d (x and z coordinates). """
-    myAngles = computeAngles(path, span=1)
+def computeTurningPoints (path, span, minAngle, angleType):
+    """Counts all angles above a predefined value (minAngle). 
+    CAVE: check that minAngle is the same unit as specified in angleType. 
+    Use span to define if angles are computed from step to step (span = 1), or if steps should be omiited (giving higher vs. lower frequency turning angles).
+    Use angleType to specify if the output is in degrees or radians (default is degrees).
+    Trajectoires need to be provided as 2d arrays (x and z coordinates). 
+    Note that angles are calculated as absolute values (neglects left/right turning). """
+    myAngles = computeAngles(path, span, angleType=angleType)
     turningPoints = myAngles[myAngles >= minAngle]
     return turningPoints
 
-def getNumTurningPoints (paths, minAngle):
-    """ Returns the number of truns greater than a minimum Angle. 
-    Input needs to be 2d (x and z coordinates). """
+def getNumTurningPoints (paths, span, minAngle, angleType):
+    """returns a list of counts of all angles above a predefined value (minAngle). 
+    CAVE: check that minAngle is the same unit as specified in angleType. 
+    Use span to define if angles are computed from step to step (span = 1), or if steps should be omiited (giving higher vs. lower frequency turning angles).
+    Use angleType to specify if the output is in degrees or radians (default is degrees).
+    Trajectoires need to be provided as 2d arrays (x and z coordinates). 
+    Note that angles are calculated as absolute values (neglects left/right turning). """
     res = []
     for p in paths:
-        turningPoints = computeTurningPoints(p, minAngle)
+        turningPoints = computeTurningPoints(p, span, minAngle, angleType)
         numTurningPoints = len(turningPoints)
         res.append(numTurningPoints)
     return res
@@ -531,7 +529,9 @@ def getNumTurningPoints (paths, minAngle):
 # Sinuosity
 
 def computeSinuosity(path, rediscretized):
-    """ computes sinuosity for a given path. if path is rediscretized, the simple formula is used (Bovet & Benhamou, 1988), if not, the corrected formula is used (Benhamou, 2004)."""   
+    """ computes sinuosity for a given path. 
+    if the traejctory has steps of equal lengths or has been redidcretized, set rediscretized = True, which then uses the simple formula (Bovet & Benhamou, 1988).
+    if steps are of unequl length, set rediscretized = False, which then applies the corrected formula (Benhamou, 2004)."""   
     
     if np.shape(path)[1] > 2:
         raise Exception('2d path needed. Please check if 2d path is provided.')
@@ -558,7 +558,10 @@ def computeSinuosity(path, rediscretized):
 
 
 def getSinuosity(paths, rediscretized):
-    """ returns sinuosity values for multiple paths as numpy array. Specifiy "rediscretize" to select sinuposity formula -> see computeSinuposity() """   
+    """ returns sinuosity values for multiple paths as numpy array. 
+    Specifiy "rediscretize" to select sinuposity formula dependent on trajectory type -> see computeSinuosity().
+    CAVE: may take a long time to compute!"""   
+
     res = []
     
     for p in paths:
@@ -576,7 +579,7 @@ def getSinuosity(paths, rediscretized):
 # fractal dimension
 
 def CreateLogSequence(start, stop, numSteps):
-    """Use this to get sensible steps for the calcualtion of Fractal Dimension.
+    """Use this to get log-distributed steps for the calcualtion of Fractal Dimension (see Nams, 2006).
     """
     stepSizes = np.linspace(np.log10(start), np.log10(stop), numSteps) # get a series of steps evenly distributed on the log scale
     stepSizes = np.exp(stepSizes * np.log(10))
@@ -584,11 +587,11 @@ def CreateLogSequence(start, stop, numSteps):
 
 
 def computeFractalDimensionValues(path, stepSizes, adjustD):
-    """Input needs to be in traja fromat (x and y coordinates only, as pandas dataframe.)
-    adjustD = True corrects for truncation error (Nams, 2006)
+    """Returns a numpy array containing the Fractal Dimension Values for different stepSizes given in stepSizes. 
+    StepSizes can be specified via CreateLogSequence().
+    The path needs to be in traja fromat (x and y coordinates only, reprsented as pandas dataframe - you may use numpyToTraja() for the conversion.
+    Set adjustD = True (default) to correct for truncation error according to Nams (2006)
     """
-    
-    
     fractalDimensionValues = np.empty((0,2), float)
 
     for myStepSize in stepSizes:
@@ -601,10 +604,10 @@ def computeFractalDimensionValues(path, stepSizes, adjustD):
             lastRD = pathRDarray[0][-1] 
             lastTrj = TrajaToNumpy([path])[0][-1]
             distCorrection = np.linalg.norm(lastRD-lastTrj) # get euclidian distance between points
-            pathLength = computeLength(pathRDarray, "2d")[0] # get path length of rediscretized path
+            pathLength = computePathLength(pathRDarray[0], "2d") # get path length of rediscretized path, convert list back to array
             pathLength = pathLength + distCorrection # add correction 
         else: 
-            pathLength = computeLength(pathRDarray, "2d")[0] # stm.computeLengtnh only accepts list input, so conversion back and forth is necessary
+            pathLength = computePathLength(pathRDarray[0], "2d") # stm.computeLengtnh only accepts list input, so conversion back and forth is necessary
 
         fractalDimensionValues = np.vstack((fractalDimensionValues,  np.array([[myStepSize, pathLength]]))) # append results to fractalDimensionValues Array
     
@@ -613,9 +616,10 @@ def computeFractalDimensionValues(path, stepSizes, adjustD):
     
 
 def getFractalDimensionValues(paths, stepSizes, adjustD):
-    """input needs to be a list of trajectories in traja fromat (x and y coordinates only, as pandas dataframe).
-    returns a list of numpy arrays containing fractal dimension values.
-    Takes quite long for a greater number of dataframes."""
+    """Returns a list of arrays with the Fractal Dimension Values for each path. 
+    "Paths" needs to be a list of trajectories in traja fromat (x and y coordinates only, as pandas dataframe). You may use numpyToTraja() for the conversion.
+    StepSizes can be specified via CreateLogSequence().
+    Set adjustD = True (default) to correct for truncation error according to Nams (2006)."""
     res = []
     
     for p in paths:
@@ -626,12 +630,12 @@ def getFractalDimensionValues(paths, stepSizes, adjustD):
 
 
 
-def computeFractalDimension(path, stepSizes, adjustD, meanD):
+def computeFractalDimension(path, stepSizes, adjustD = True, meanD = True):
     """ 
-    compute fractal dimension for a sigle trajectory
-    input needs to be a dataframe compatible to traja (x and y coordinates only)
-    If dMean = True, dividers are walked forwards and backward to correct for rediscretization biases (Nams, 2006)
-    adjustD = True corrects for truncation error (Nams, 2006)
+    Compute the Fractal Dimension for a single trajectory.
+    Input needs to be a dataframe compatible to traja (x and y coordinates only, as pandas dataframe). You may use numpyToTraja() for the conversion.
+    If meanD = True, dividers are walked forwards as well as backward to correct for rediscretization biases (Nams, 2006). Defaults to True.
+    adjustD = True corrects for truncation error (Nams, 2006). Defaults to True.
     """  
 
     FDvalues = computeFractalDimensionValues(path, stepSizes, adjustD = adjustD)
@@ -653,11 +657,10 @@ def computeFractalDimension(path, stepSizes, adjustD, meanD):
 
 def getFractalDimension(paths, stepSizes, adjustD, meanD):
     """ 
-    compute fractal dimension for a set of trajectories.
-    input needs to be a list of dataframes compatible to traja (x and y coordinates only)
-    If dMean = True, dividers are walked forwards and backward to correct for rediscretization biases (Nams, 2006)
-    adjustD = True corrects for truncation error (Nams, 2006)
-    returns a numpy array containing the FD values for all trajectories in the list
+    Compute the Fractal Dimension for a list of trajectories, returns values as a single numpy array.
+    Input needs to be a dataframe compatible to traja (x and y coordinates only, as pandas dataframe). You may use numpyToTraja() for the conversion.
+    If meanD = True, dividers are walked forwards as well as backward to correct for rediscretization biases (Nams, 2006). Defaults to True.
+    adjustD = True corrects for truncation error (Nams, 2006). Defaults to True.
     CAVE: may take along time to compute!
     """  
     res = []
@@ -676,10 +679,18 @@ def getFractalDimension(paths, stepSizes, adjustD, meanD):
 
 
 def simplifyPath(path, epsilon):
+    """Applies the rdp algorithm to a single path (needs to be a numpy array) to rescale the trajectory to the flight scale.
+    Returns the simplified path as numpy array.
+    Use Epsilon to specify the degree of simplification (higher epsilon leads to greater simplification). 
+    See the rdp package for more information."""
     return rdp.rdp(path, epsilon)
 
 def getSimplePaths(paths, epsilon=5):
-    """Uses RDP to simplify the path. CAVEAT: Result depends heavily on epsilon. """
+    """Applies the rdp algorithm to a list of paths (needs to be a list of numpy arrays) to rescale the trajectories to the flight scale.
+    Returns the simplified paths as a list of numpy arrays.
+    Use Epsilon to specify the degree of simplification (higher epsilon leads to greater simplification). 
+    See the rdp package for more information.
+    CAVE: may take a long time to compute!"""
     
     res = []
     for p in paths:
@@ -687,18 +698,14 @@ def getSimplePaths(paths, epsilon=5):
         res.append(simplePath)
     return res
 
-def computeCompactness(paths):
-     """Returns the compression rate or the number of remaining vertices using RDP algorithm for path simplification. CAVEAT: Result depends heavily on epsilon and does NOT scale linearly with varing epsilon."""
+def computeCompactness(paths_flightScaled):
+     """Returns the compression rate/the number of remaining vertices of a list of flight scaled paths (as numpy array). Needs a list of flight scaled paths as input.
+     CAVEAT: Result depends heavily on epsilon and does NOT scale linearly with varing epsilon."""
      res = []
-     for p in paths:
+     for p in paths_flightScaled:
          res.append(len(p))
      res = np.asarray(res)
      return res
-
-
-#def simplifiedLength(path, epsilon):
-#    return len(simplifyPath(path, epsilon))
-
 
 
 
@@ -707,8 +714,14 @@ def computeCompactness(paths):
 # helper functions
 
 
-# finds minimal and maximal x and z values of all paths
+####### functions for building histograms of adaptive size
+
+
 def computeBoundingBox(paths):
+    """Finds the edges of the histogram, given a group of trajectories in the same environment (minimal and maximal x and z values of all paths). 
+    Input needs to be a list of numpy arrays.
+    returns a list containing two arrays (minimal and maximal x values, minimal and maximal z values).
+    CAVE: requries a 3d trajectory"""
     xmin,ymin,zmin = np.min(paths[0], axis=0) # get min for each axis
     xmax,ymax,zmax = np.max(paths[0], axis=0) # get max for each axis
     for p in paths:
@@ -716,9 +729,42 @@ def computeBoundingBox(paths):
         xmax,ymax,zmax = np.max([[xmax,ymax,zmax], np.max(p, axis=0)],axis=0)
     return [[math.floor(xmin),math.ceil(xmax)],[math.floor(zmin),math.floor(zmax)]]
 
-# refits bounding box to yield only integers upon division
-def refitBoundingBox(bbox, binNum):
 
+def computeBinNumber(binSize, bbox):
+    """Given a predefined bin size (binSize) and the environment size (bbox), get the optimal number of bins to build the histogram.    
+    """
+    # get min and max values for each direction
+    xmin = bbox[0][0]
+    xmax = bbox[0][1]
+    zmin = bbox[1][0]
+    zmax = bbox[1][1]
+
+    # get max x and z distances (rounded to the next higher int)
+    xDist = abs(xmin - xmax)
+    zDist = abs(zmin - zmax)
+    
+    # compute number of bins for each axis. 
+    xBinNum = xDist / binSize
+    zBinNum = zDist / binSize
+    
+    # If bins don't fit as a whole, increase size of the bounding box until bins fit nicely.
+    while xBinNum.is_integer() == False:
+        xDist = xDist + 1
+        xBinNum = xDist / binSize
+
+    while zBinNum.is_integer() == False:
+        zDist = zDist + 1
+        zBinNum = zDist / binSize      
+        
+    return[int(xBinNum), int(zBinNum), xDist, zDist] # return binNum as int, since np.histogram2d() needs 'bins' argument in integeres  
+
+
+
+def refitBoundingBox(bbox, binSize):
+    """Rescales the bounding box created by computeBoundingBox so the bins fit nicely inside.
+    Specify the bounding box (bbox) by using computeBoundingBox().
+    Specify the size of the bins (binSize).
+    """
     xmin = bbox[0][0]
     xmax = bbox[0][1]
     zmin = bbox[1][0]
@@ -726,9 +772,9 @@ def refitBoundingBox(bbox, binNum):
     
     xDistOriginal = abs(xmin - xmax)
     zDistOriginal = abs(zmin - zmax)
-    
-    xDistNew =  computeBinNumber(binNum, bbox)[2]
-    zDistNew =  computeBinNumber(binNum, bbox)[3]
+     
+    xDistNew =  computeBinNumber(binSize, bbox)[2]
+    zDistNew =  computeBinNumber(binSize, bbox)[3]
     
     xDiffOriginalNew = xDistNew - xDistOriginal 
     zDiffOriginalNew = zDistNew - zDistOriginal 
@@ -743,54 +789,10 @@ def refitBoundingBox(bbox, binNum):
     return bboxNew
 
 
-# get optimal bin number
-def computeBinNumber(binSize, bbox):
-    # get min and max values for each direction
-    xmin = bbox[0][0]
-    xmax = bbox[0][1]
-    zmin = bbox[1][0]
-    zmax = bbox[1][1]
-
-    
-    # get max x and z distances (rounded to the next higher int)
-    xDist = abs(xmin - xmax)
-    zDist = abs(zmin - zmax)
-    
-    # compute number of bins for each axis. If bins don't fit, increase size of the bounding box until bins fit.
-    xBinNum = xDist / binSize
-    zBinNum = zDist / binSize
-    
-    while xBinNum.is_integer() == False:
-        xDist = xDist + 1
-        xBinNum = xDist / binSize
-
-    while zBinNum.is_integer() == False:
-        zDist = zDist + 1
-        zBinNum = zDist / binSize      
-        
- 
-    return[int(xBinNum), int(zBinNum), xDist, zDist] # return binNum as int, since np.histogram2d() needs 'bins' argument in integeres  
-
-# set up histogram for area based measures
-def defineHistogram( binSize, paths, worldFilter):
-    
-    # get initial world limits
-    path_data_resampled_3d = convert4dTo3d(paths)
-    
-    if worldFilter != "nofilter":
-        worldLimits = computeBoundingBox([path_data_resampled_3d[i] for i in worldFilter])
-    else: 
-        worldLimits = computeBoundingBox(path_data_resampled_3d)
-    
-    # get the number of bins needed to cover area with the given worldLimits 
-    bins = computeBinNumber(binSize, worldLimits)[0:2] # gives the number of bins for each axis in the 2d histogram
-    worldLimitsNew = refitBoundingBox(worldLimits, binSize) # if necessary, extend world limits so bins fit nicely inside
-    
-    return [bins, worldLimitsNew]
 
 
-def defineHist( binSize, paths, world = None):
-    
+def defineHist(binSize, paths, world = None):
+    ''' takes in the desired bin size and returns a list containing the number of bins the map will be divided into as well as the map endpoints that span the grid (upper left and lower right corner points).'''
     # get initial world limits
     path_data_resampled_3d = convert4dTo3d(paths)
     
@@ -810,13 +812,15 @@ def defineHist( binSize, paths, world = None):
 
 
 
-# convert trajectories from one dimension to another
+##### convert trajectories from one dimension to another
 
 def removeHeigthCoordinate(path):
     return path[:,[0,2]]
 
 # convert 3d path to 2d path
 def convert3dTo2d(paths):
+    """ Convert a group of 3d trajectories to 2d trajectories. Requires a list of numpy array with three columns, returns a list of numpy array with three columns.
+    CAVE: assumes that trajectories are in a x,y,z order, where y is upwards/downwards movement. """
     res = []
     for p in paths:
         res.append(removeHeigthCoordinate(p))
@@ -824,24 +828,23 @@ def convert3dTo2d(paths):
 
 # convert 3d path to 2d path
 def convert4dTo3d(paths):
+    """ Convert a group of 3d trajectories to 2d trajectories. Requires a list of numpy array with four columns, returns a list of numpy array with three columns.
+    CAVE: assumes that trajectories are in a x,y,z,time order, where y is upwards/downwards movement. """
     res = []
     for p in paths:
         p3d = p[:,[0,1,2]]
         res.append(p3d)
     return res
 
-def convert2dTo3d(paths):
-    
+def convert2dTo3d(paths, height = 1):
+    """ Convert a group of 2d trajectories to 3d trajectories. Requires a list of numpy array with two columns, returns a list of numpy array with three columns.
+    CAVE: assumes that trajectories are in a x,z order. "Height"" specifies the middle "y" column that will be inserted. By default this can be a fixed value, or a numpy array with a single column."""   
     res = []
-    for p in paths:
-        
+    for p in paths:      
         yCoordinate = np.zeros(len(p)).reshape(len(p),1) # create a dummy y coordinate
-        yCoordinate[:] = 1.9 # this is the medium hight for our dataset
+        yCoordinate[:] = height 
         path3d = np.hstack((p, yCoordinate)) # add ycoordinate to original array
-        
-        #path3d[:, [3, 1]] = path3d[:, [1, 3]] # swap columns to correct order (x,y,z,time)
-        #path3d[:, [3, 2]] = path3d[:, [2, 3]]
-        path3d[:, [2, 1]] = path3d[:, [1, 2]]
+        path3d[:, [2, 1]] = path3d[:, [1, 2]] # rearrange array so everything is in x,y,z order again
         
         res.append(path3d) # append to return list
         
@@ -885,7 +888,7 @@ def smoothTriangle(data, degree):
 
 
 def DescribeHistory(Histories, SummaryStat):
-    """returns array with summary stats on chosen history data (angles, speed, minObjDistance..) """  
+    """returns array with summary stats on chosen history data (angles, speed, minObjDistance..). Requires a list of numpy arrays (i.e., a list with arrays each containing the step lengths across time for a single trajectory)"""  
     res = []
     for p in Histories:
         if SummaryStat == "mean":
@@ -903,6 +906,25 @@ def DescribeHistory(Histories, SummaryStat):
     return np.asarray(res)
 
 
+def describeDistribution(df):
+    """returns array with descriptive stats on chosen dataframe column (angles, speed, minObjDistance..). Requires a list of numpy arrays (i.e., a list with arrays each containing the step lengths across time for a single trajectory)"""  
+    res = []
+    coeffVar = df.std() / df.mean()
+    skewness = df.skew()
+    kurtosis = df.kurtosis()
+    # get percent of cases in ceiling/floor range
+    valueRanges = df.max() - df.min() # get ranges of all parameter values 
+    rangeSteps = valueRanges / 100 # get percent steps 
+    floorRange =  df.min() + 10*rangeSteps 
+    ceilingRange = df.max() - 10*rangeSteps
+    floorCases = df[df <= floorRange].count() # get count of cases in floor Range
+    floorCasesPercent = floorCases / df.shape[0] * 100 # get percentage of cases in floor Range
+    ceilingCases = df[df >= ceilingRange].count() # get count of cases in ceiling Range
+    ceilingCasesPercent = ceilingCases / df.shape[0] * 100 # get percentage of cases in ceiling Range
+
+    res = pd.DataFrame({"coefficient of variation": coeffVar, "skewness": skewness, "kurtosis": kurtosis, "percent cases in lowest 10% of values": floorCasesPercent, "percent cases in highest 10% of values": ceilingCasesPercent})
+    res = res.round(3)
+    return res
 
 
 def standardizeHist(hist, method, N = 1):
@@ -948,31 +970,36 @@ def rediscretizePaths(paths, R):
 
 
 
-def create_timestamp(path, session_duration, inputType):
-    """Returns the original path plus timestamps, assuming regular sampling intervals and a given total session duration. Input type can be 'df' or 'array' """
-    #session_duration = 150 # session duration in ms
-    sampling_interval =  session_duration / len(path)
-    time_sequence = np.linspace(0, len(path)*sampling_interval, len(path)).reshape((len(path),1)) # reshape to specify dimensions
-    
-    new_path = path
-    if inputType == "array":
-        new_path = np.append(new_path, time_sequence, axis = 1)
-    elif inputType == "df": 
-        new_path.loc[:,'time'] =  time_sequence # create an evenly spaced time variable
+def create_timestamp(path, sessionDuration = "variable", samplingInterval = "unknown"):
+    """Takes a path without timestamps (as array), returns the original path plus timestamps (as array).
+    If the total duration is fixed across all trials and particiapnts, but the sampling rate is unknown, specify the session time in "session_duration" and set samplingInterval to "unknown".
+    If the sampling rate is known specify samplingInterval as well as session_duration. 
+    If the session duration varies across session/participants, set session_duration to "variable". """
 
+    # decide whether to use fixed or variable session length
+    if samplingInterval == "unknown" and sessionDuration != "variable":
+        # estimate the samping interval based on the given duration
+        samplingInterval =  sessionDuration / len(path)
+        timeSequence = np.linspace(0, len(path)*samplingInterval, len(path)).reshape((len(path),1)) # reshape to specify dimensions
+    
+    elif samplingInterval != "unknown":
+        if sessionDuration == "variable": # compute the duration given the specified sampling rate
+            sessionDuration = len(path)
+        sessionEndTime = round(sessionDuration * samplingInterval, 4) # compute endpoint (round to a specified number of decimals to prevent fuzzy float endpoints -> we use four here)
+        timeSequence = np.arange(0,sessionEndTime, samplingInterval) # create the time sequence
+        timeSequence = timeSequence.reshape((len(path),1)) # reshape into a format that can be appended to the trajectory array
+        
+    new_path = path
+    new_path = np.append(path, timeSequence, axis = 1) # 
     return(new_path)
 
-
-
-
-def add_timestamps(paths, session_duration, inputType):
-    """add timestamps to all input paths, assuming regular sampling intervals and a given total session duration. Input type can be 'df' or 'array' """   
-    res = []
-    
+                 
+def add_timestamps(paths, sessionDuration, samplingInterval):
+    """add timestamps to all input paths (as a list of arrays), given either sampling intervals or session duration. """                
+    res= []
     for p in paths:
-        new_path = create_timestamp(p, session_duration = session_duration, inputType = inputType)
+        new_path = create_timestamp(p, sessionDuration, samplingInterval)
         res.append(new_path)
-        
     return res
 
 
@@ -984,6 +1011,8 @@ def resampleTime(path, stepTime):
     path_resampled = np.vstack([x,z,new_times]).T# concat points back to a single array      
     return path_resampled
 
+
+
 def resamplePaths(paths, stepTime):
     """ resample multiple trajectories to a common regular sampling interval given by 'steptime'. Needs 2d paths (x an z) plus a third timestamp column."""   
     res= []
@@ -992,4 +1021,24 @@ def resamplePaths(paths, stepTime):
         res.append(resampledPath)
     return(res)
         
+
+
+def parameterIteration(parameterValues, evalFunction, argumentDict, parameterName):
+    """ iterate across a function using different parameter values and save the output to a dataframe.
+    parameterValues specifies the different values you want the function to iterate across (expects a list of values).
+    evalFunction contains the function name of the function that you want to evaluate.
+    argumentDict is a dictionary that contains all the function arguments necessary for the evalFunction.
+    parameterName is a string representing the keyword for the parameter you want to iterate across.
+    """   
+     
+    res = []
+    for i in parameterValues:
+        argumentDict[parameterName] = i
+        currentData = evalFunction(**argumentDict)
+        res.append(currentData)
+        
+    df = pd.DataFrame(res).T
+    #df.columns = parameterValues
+    return df
+
 
