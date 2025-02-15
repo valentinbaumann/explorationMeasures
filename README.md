@@ -1,5 +1,6 @@
 # ExplorationMeasures
-This is the repository for Baumann et al.: "Towards a characterization of human spatial exploration behavior" (unpublished). For background information on the datasets, please see [Schomaker et al., (2022). *Effects of exploring a novel environment on memory across the lifespan*](https://www.nature.com/articles/s41598-022-20562-4) for the NEMO dataset as well as [Brunec et al., (2022). *Exploration patterns shape cognitive map learning*](https://www.sciencedirect.com/science/article/abs/pii/S0010027722003493) for the SILCTON dataset.
+This is the repository for our study [Baumann et al., (2025). *Towards a characterization of human spatial exploration behavior*](https://link.springer.com/article/10.3758/s13428-024-02581-3). For background information on the datasets, please see [Schomaker et al., (2022). *Effects of exploring a novel environment on memory across the lifespan*](https://www.nature.com/articles/s41598-022-20562-4) for the NEMO dataset as well as [Brunec et al., (2022). *Exploration patterns shape cognitive map learning*](https://www.sciencedirect.com/science/article/abs/pii/S0010027722003493) for the SILCTON dataset.
+Note that we released an earlier version of this code prior to publication that did not include the analysis of the SILCTON dataset. We also added a new measure (minimum convex polygon) and added many small improvements to the code.
 
 ![visualization of trajectories](./pictures/img_trajectories.png "visualization of trajectories")
 
